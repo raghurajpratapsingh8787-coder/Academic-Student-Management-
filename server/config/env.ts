@@ -58,3 +58,26 @@ export function getAllowedOrigins(): string[] {
   }
   return Array.from(new Set([...defaults, ...env.corsOrigins]));
 }
+
+export function isOriginAllowed(
+  origin: string | undefined,
+  requestHost: string,
+  allowedOrigins: string[]
+): boolean {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  try {
+    const parsed = new URL(origin);
+    if (
+      requestHost &&
+      parsed.host === requestHost &&
+      (parsed.protocol === 'https:' || parsed.protocol === 'http:')
+    ) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+

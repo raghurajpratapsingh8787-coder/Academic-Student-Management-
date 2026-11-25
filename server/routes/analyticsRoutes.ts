@@ -37,10 +37,17 @@ router.get('/analytics/overview', async (req, res, next) => {
         departmentName: departments.find((d) => d._id === s.departmentId)?.name || 'Unassigned',
       }));
 
+    const visibleActivities =
+      req.user!.role === 'STAFF'
+        ? auditLogs.filter(
+            (log) => !log.action.startsWith('ADMIN_') && !log.action.startsWith('SETTINGS_')
+          )
+        : auditLogs;
+
     res.json({
       ...metrics,
       recentStudents,
-      recentActivities: auditLogs,
+      recentActivities: visibleActivities,
     });
   } catch (err) {
     next(err);

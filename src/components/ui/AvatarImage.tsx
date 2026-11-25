@@ -44,8 +44,11 @@ export function AvatarImage({ src, name, size = 'md', className = '' }: AvatarIm
         .catch(() => {
           if (active) setFailed(true);
         });
-    } else {
+    } else if (src.startsWith('/src/assets/') || src.startsWith('https://')) {
       setResolvedSrc(src);
+    } else {
+      setResolvedSrc(null);
+      setFailed(true);
     }
 
     return () => {

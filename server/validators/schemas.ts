@@ -79,7 +79,26 @@ export const studentCreateSchema = z.object({
   phone: z.string().trim().min(7, 'Valid phone number required').max(25),
   gender: z.enum(['Female', 'Male', 'Non-binary', 'Prefer not to say']),
   dateOfBirth: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD format'),
-  profilePhoto: z.string().trim().max(300).optional().default(''),
+  profilePhoto: z
+    .string()
+    .trim()
+    .max(300)
+    .refine(
+      (val) => {
+        if (!val) return true;
+        if (val.includes('..') || val.includes('\\')) return false;
+        if (val.startsWith('/api/files/avatars/') || val.startsWith('/src/assets/images/')) return true;
+        try {
+          const u = new URL(val);
+          return u.protocol === 'https:';
+        } catch {
+          return false;
+        }
+      },
+      { message: 'Profile photo must be a safe uploaded avatar path or an HTTPS URL' }
+    )
+    .optional()
+    .default(''),
   departmentId: z.string().trim().min(1, 'Department is required'),
   courseId: z.string().trim().min(1, 'Course is required'),
   semester: z.coerce.number().int().min(1).max(12),

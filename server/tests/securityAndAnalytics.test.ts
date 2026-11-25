@@ -11,7 +11,8 @@ import {
   verifyPassword,
 } from '../utils/crypto';
 import { computeAttendanceSummary, computeOverviewMetrics } from '../utils/analyticsMath';
-import { normalizeMongoUri } from '../config/env';
+import { isOriginAllowed, normalizeMongoUri } from '../config/env';
+import { studentCreateSchema } from '../validators/schemas';
 import type { AttendanceRecord, CourseRecord, DepartmentRecord, StudentRecord } from '../db/store';
 
 test('scrypt password hashing verifies correct password and rejects wrong password', async () => {
@@ -116,4 +117,36 @@ test('normalizeMongoUri handles placeholders, quotes, prefixes, and valid scheme
   assert.equal(normalizeMongoUri('"mongodb+srv://user:pass@cluster.mongodb.net/acadex"'), 'mongodb+srv://user:pass@cluster.mongodb.net/acadex');
   assert.equal(normalizeMongoUri('MONGODB_URI=mongodb://127.0.0.1:27017/acadex'), 'mongodb://127.0.0.1:27017/acadex');
   assert.equal(normalizeMongoUri('MONGODB+SRV://host/db'), 'mongodb+srv://host/db');
+});
+
+test('isOriginAllowed permits same-host and allowlisted origins while rejecting cross-tenant run.app hosts', () => {
+  const allowed = ['http://localhost:3000', 'https://ais-dev-example.asia-east1.run.app'];
+  assert.equal(isOriginAllowed('https://ais-dev-example.asia-east1.run.app', 'ais-dev-example.asia-east1.run.app', allowed), true);
+  assert.equal(isOriginAllowed('https://ais-pre-example.asia-east1.run.app', 'ais-pre-example.asia-east1.run.app', allowed), true);
+  assert.equal(isOriginAllowed('https://attacker-123.us-central1.run.app', 'ais-dev-example.asia-east1.run.app', allowed), false);
+  assert.equal(isOriginAllowed('https://evil.example', 'ais-dev-example.asia-east1.run.app', allowed), false);
+});
+
+test('studentCreateSchema rejects unsafe profilePhoto URL schemes and allows safe avatar paths', () => {
+  const baseStudent = {
+    studentId: 'STU-2026-500',
+    fullName: 'Test Student',
+    email: 'test.student@acadex.edu',
+    phone: '+1 415 555 0199',
+    gender: 'Female' as const,
+    dateOfBirth: '2005-04-12',
+    departmentId: 'dept-1',
+    courseId: 'course-1',
+    semester: 1,
+    enrollmentDate: '2026-09-01',
+    address: '100 Main St',
+    city: 'San Francisco',
+    state: 'CA',
+    postalCode: '94105',
+    status: 'ACTIVE' as const,
+  };
+  assert.equal(studentCreateSchema.safeParse({ ...baseStudent, profilePhoto: 'javascript:alert(1)' }).success, false);
+  assert.equal(studentCreateSchema.safeParse({ ...baseStudent, profilePhoto: 'data:text/html,<script>alert(1)</script>' }).success, false);
+  assert.equal(studentCreateSchema.safeParse({ ...baseStudent, profilePhoto: '/api/files/avatars/stu_123.jpg' }).success, true);
+  assert.equal(studentCreateSchema.safeParse({ ...baseStudent, profilePhoto: 'https://cdn.example.com/avatar.jpg' }).success, true);
 });

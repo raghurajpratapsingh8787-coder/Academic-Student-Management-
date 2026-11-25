@@ -3,7 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
-import { getAllowedOrigins } from './config/env';
+import { getAllowedOrigins, isOriginAllowed } from './config/env';
 import { errorHandler, sanitizeBodyAndQuery } from './middleware/auth';
 import academicRoutes from './routes/academicRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
@@ -26,34 +26,26 @@ export function createApp(): express.Express {
   );
 
   const allowedOrigins = getAllowedOrigins();
-  app.use(
+  app.use((req, res, next) => {
+    const requestHost = (req.headers['x-forwarded-host'] || req.headers.host || '')
+      .toString()
+      .split(',')[0]
+      .trim();
     cors({
       origin: (origin, callback) => {
-        if (!origin) {
+        if (isOriginAllowed(origin, requestHost, allowedOrigins)) {
           callback(null, true);
           return;
         }
-        if (allowedOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        // Allow Cloud Run / AI Studio preview host origins matching *.run.app when served over HTTPS
-        try {
-          const parsed = new URL(origin);
-          if (parsed.protocol === 'https:' && parsed.hostname.endsWith('.run.app')) {
-            callback(null, true);
-            return;
-          }
-        } catch {
-          // ignore parse failure
-        }
-        callback(new Error('Origin not permitted by CORS policy'));
+        const corsErr = new Error('Origin not permitted by CORS policy') as Error & { statusCode?: number };
+        corsErr.statusCode = 403;
+        callback(corsErr);
       },
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    })
-  );
+    })(req, res, next);
+  });
 
   app.use(express.json({ limit: '100kb' }));
   app.use(express.urlencoded({ extended: false, limit: '100kb' }));

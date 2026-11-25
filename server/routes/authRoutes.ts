@@ -88,11 +88,18 @@ router.get('/status', async (req, res, next) => {
   }
 });
 
+let setupInProgress = false;
+
 /**
  * One-time first-run Super Admin bootstrap route.
  * Permanently locks once at least one admin account exists in the database.
  */
 router.post('/setup', authLimiter, async (req, res, next) => {
+  if (setupInProgress) {
+    res.status(409).json({ error: 'Initial administrator setup is already in progress.' });
+    return;
+  }
+  setupInProgress = true;
   try {
     const existingCount = await db.countAdmins();
     if (existingCount > 0) {
@@ -107,6 +114,10 @@ router.post('/setup', authLimiter, async (req, res, next) => {
     }
 
     const passwordHash = await hashPassword(parsed.data.password);
+    if ((await db.countAdmins()) > 0) {
+      res.status(403).json({ error: 'Initial administrator setup has already been completed.' });
+      return;
+    }
     const admin = await db.createAdmin({
       name: parsed.data.name,
       email: parsed.data.email,
@@ -159,6 +170,8 @@ router.post('/setup', authLimiter, async (req, res, next) => {
     });
   } catch (err) {
     next(err);
+  } finally {
+    setupInProgress = false;
   }
 });
 
@@ -426,6 +439,18 @@ router.post('/change-password', authenticate, async (req, res, next) => {
     const passwordHash = await hashPassword(parsed.data.newPassword);
     await db.updateAdmin(admin._id, { passwordHash });
     await db.revokeAllUserSessions(admin._id);
+
+    const nextRawRefresh = generateRandomToken();
+    await db.createSession({
+      userId: admin._id,
+      tokenHash: hashToken(nextRawRefresh),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      revokedAt: null,
+      userAgent: (req.headers['user-agent'] || '').slice(0, 200),
+      ip: req.ip || '',
+    });
+    setRefreshCookie(req, res, nextRawRefresh);
+
     await db.logAudit({
       actorId: admin._id,
       actorEmail: admin.email,
