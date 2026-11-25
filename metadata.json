@@ -1,0 +1,6 @@
+{
+  "name": "Acadex — Academic & Student Management Platform",
+  "description": "Enterprise student management, department and course administration, attendance tracking, and academic analytics platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
